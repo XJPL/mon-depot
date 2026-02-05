@@ -1,0 +1,12 @@
+.git
+.github
+.env
+.env.*
+**/node_modules
+**/dist
+**/.DS_Store
+**/*.log
+**/*.sqlite
+**/*.sqlite3
+**/*.db
+server/data

@@ -101,3 +101,19 @@ npm run dev
 L'app Vite tourne par defaut sur `http://localhost:5173`.
 
 Le front utilise un proxy Vite vers `http://localhost:3001` pour les requetes `/api`.
+
+## Deploiement Docker (API + Client)
+
+### Lancer en local
+```bash
+export PENNYLANE_ACCESS_TOKEN="votre_token_oauth"
+docker compose up --build
+```
+
+Le site est disponible sur `http://localhost/` et proxy automatiquement `/api`
+vers le service Node.
+
+### URL publique (recupfactures)
+Pour exposer l'URL publique `recupfactures`, configure un nom de domaine
+pointant vers l'IP du serveur (A/AAAA) et, si besoin, un proxy TLS (Caddy,
+Traefik, Nginx) devant le container web.
