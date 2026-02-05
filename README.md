@@ -32,11 +32,14 @@ Endpoints exposes :
 - `GET /api/pennylane/supplier-invoices`
 - `POST /api/pennylane/sync?type=customer|supplier|all&month=YYYY-MM&limit=100`
 - `GET /api/invoices?month=YYYY-MM&type=customer|supplier|all`
+- `GET /api/invoices/summary?month=YYYY-MM&type=customer|supplier|all`
 
 Les parametres de requete sont passes tels quels a l'API Pennylane.
 Le endpoint `/api/pennylane/sync` gere la pagination automatiquement et stocke
 les factures en base SQLite. Utiliser ensuite `/api/invoices` pour recuperer
 les factures par mois.
+`/api/invoices/summary` renvoie une liste simplifiee (date, numero, tiers,
+ttc, tva, ht).
 
 ### Front (React)
 ```bash
