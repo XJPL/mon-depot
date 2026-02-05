@@ -9,6 +9,17 @@ Ce depot fournit un point de depart simple pour developper :
 
 ## Demarrage
 
+### Demarrage rapide
+```bash
+# Docker (API + client)
+export PENNYLANE_ACCESS_TOKEN="votre_token_oauth"
+bash start.sh docker
+
+# Local (API + client)
+export PENNYLANE_ACCESS_TOKEN="votre_token_oauth"
+bash start.sh local
+```
+
 ### API (Node.js)
 ```bash
 cd server
