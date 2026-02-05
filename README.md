@@ -69,6 +69,29 @@ export PENNYLANE_CRON_MONTH="2024-12"
 export PENNYLANE_CRON_SINCE="2024-01-01"
 ```
 
+## Tests
+
+### Tests unitaires
+```bash
+cd server
+npm run test
+```
+
+### Tests de non regression (snapshots)
+```bash
+cd server
+npm run test:regression
+```
+
+### Tests de charge
+```bash
+cd server
+LOAD_BASE_URL="http://localhost:3001" \\
+LOAD_PATH="/api/invoices/summary?month=2024-12&type=all" \\
+LOAD_DURATION=15 LOAD_CONNECTIONS=25 \\
+npm run load
+```
+
 ### Front (React)
 ```bash
 cd client

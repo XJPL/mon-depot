@@ -14,6 +14,20 @@ export type InvoiceUpsert = {
   raw: unknown;
 };
 
+export type StoredInvoice = {
+  kind: InvoiceKind;
+  pennylaneId: number;
+  invoiceNumber: string | null;
+  date: string | null;
+  month: string | null;
+  currency: string | null;
+  amount: string | null;
+  status: string | null;
+  sourceUpdatedAt: string | null;
+  syncedAt: string;
+  raw: unknown;
+};
+
 type InvoiceRow = {
   kind: string;
   pennylane_id: number;
@@ -117,7 +131,7 @@ export const upsertInvoices = (
 export const listInvoicesByMonth = (
   month: string,
   kind?: InvoiceKind,
-) => {
+): StoredInvoice[] => {
   const db = getDb();
   let rows: InvoiceRow[];
 
@@ -168,7 +182,7 @@ export const listInvoicesByMonth = (
   }
 
   return rows.map((row) => ({
-    kind: row.kind,
+    kind: row.kind as InvoiceKind,
     pennylaneId: row.pennylane_id,
     invoiceNumber: row.invoice_number,
     date: row.date,

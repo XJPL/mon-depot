@@ -68,3 +68,11 @@ export const getDb = () => {
   dbInstance = db;
   return dbInstance;
 };
+
+export const resetDb = () => {
+  if (!dbInstance) {
+    return;
+  }
+  dbInstance.close();
+  dbInstance = null;
+};
