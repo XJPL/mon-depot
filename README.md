@@ -20,6 +20,12 @@ export PENNYLANE_ACCESS_TOKEN="votre_token_oauth"
 bash start.sh local
 ```
 
+Sur Windows (cmd) :
+```
+set PENNYLANE_ACCESS_TOKEN=votre_token_oauth
+start.cmd docker
+```
+
 ### API (Node.js)
 ```bash
 cd server
