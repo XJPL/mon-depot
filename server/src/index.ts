@@ -1,13 +1,13 @@
 import express from "express";
+import { fetchPennylane } from "./pennylane.js";
+import { type InvoiceKind, listInvoicesByMonth } from "./invoiceStore.js";
 import {
-  fetchPennylane,
-  fetchPennylaneAllPages,
-} from "./pennylane.js";
-import {
-  type InvoiceKind,
-  listInvoicesByMonth,
-  upsertInvoices,
-} from "./invoiceStore.js";
+  parseDateOnly,
+  parseLimit,
+  parseMonth,
+  syncPennylane,
+} from "./syncService.js";
+import { startPennylaneScheduler } from "./scheduler.js";
 
 const app = express();
 const port = Number(process.env.PORT) || 3001;
@@ -48,9 +48,22 @@ const sendPennylaneResponse = async (
 
 const getQueryString = (value: unknown) => {
   if (Array.isArray(value)) {
-    return typeof value[0] === "string" ? value[0] : undefined;
+    const first = value[0];
+    if (typeof first === "string") {
+      return first;
+    }
+    if (typeof first === "number" || typeof first === "boolean") {
+      return String(first);
+    }
+    return undefined;
   }
-  return typeof value === "string" ? value : undefined;
+  if (typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return undefined;
 };
 
 const parseInvoiceKind = (value?: string) => {
@@ -63,44 +76,18 @@ const parseInvoiceKind = (value?: string) => {
   return null;
 };
 
-const parseMonth = (value?: string) => {
+const parseBoolean = (value?: string) => {
   if (!value) {
     return null;
   }
-  const match = /^(\d{4})-(\d{2})$/.exec(value);
-  if (!match) {
-    return null;
+  const normalized = value.trim().toLowerCase();
+  if (["true", "1", "yes", "y", "on"].includes(normalized)) {
+    return true;
   }
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  if (!Number.isFinite(year) || month < 1 || month > 12) {
-    return null;
+  if (["false", "0", "no", "n", "off"].includes(normalized)) {
+    return false;
   }
-  return { value, year, month };
-};
-
-const getMonthRange = (year: number, month: number) => {
-  const start = new Date(Date.UTC(year, month - 1, 1));
-  const end = new Date(Date.UTC(year, month, 0));
-  return {
-    start: start.toISOString().slice(0, 10),
-    end: end.toISOString().slice(0, 10),
-  };
-};
-
-const parseLimit = (value?: string) => {
-  if (!value) {
-    return 100;
-  }
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) {
-    return null;
-  }
-  const rounded = Math.floor(parsed);
-  if (rounded < 1 || rounded > 100) {
-    return null;
-  }
-  return rounded;
+  return null;
 };
 
 const toAmountString = (value: unknown) => {
@@ -167,40 +154,6 @@ const extractTier = (item: Record<string, unknown>, kind: InvoiceKind) => {
   return { id: null, label: null };
 };
 
-const normalizeInvoice = (item: Record<string, unknown>) => {
-  const id = item.id;
-  if (typeof id !== "number") {
-    return null;
-  }
-  const invoiceNumber =
-    typeof item.invoice_number === "string" ? item.invoice_number : null;
-  const date = typeof item.date === "string" ? item.date : null;
-  const currency = typeof item.currency === "string" ? item.currency : null;
-  const amount =
-    toAmountString(item.currency_amount) ?? toAmountString(item.amount);
-  const status =
-    typeof item.status === "string"
-      ? item.status
-      : typeof item.payment_status === "string"
-        ? item.payment_status
-        : typeof item.accounting_status === "string"
-          ? item.accounting_status
-          : null;
-  const updatedAt =
-    typeof item.updated_at === "string" ? item.updated_at : null;
-
-  return {
-    pennylaneId: id,
-    invoiceNumber,
-    date,
-    currency,
-    amount,
-    status,
-    sourceUpdatedAt: updatedAt,
-    raw: item,
-  };
-};
-
 const buildInvoiceSummary = (
   item: ReturnType<typeof listInvoicesByMonth>[number],
 ) => {
@@ -239,33 +192,6 @@ const buildInvoiceSummary = (
     ttc,
     ht,
     tva,
-  };
-};
-
-const syncPennylaneInvoices = async (
-  kind: InvoiceKind,
-  query: Record<string, unknown>,
-) => {
-  const path =
-    kind === "customer" ? "/customer_invoices" : "/supplier_invoices";
-  let stored = 0;
-
-  const summary = await fetchPennylaneAllPages<Record<string, unknown>>(
-    path,
-    query,
-    (items) => {
-      const normalized = items
-        .map((item) => normalizeInvoice(item))
-        .filter((item): item is NonNullable<typeof item> => item !== null);
-      stored += upsertInvoices(kind, normalized);
-    },
-  );
-
-  return {
-    kind,
-    pages: summary.pageCount,
-    fetched: summary.totalItems,
-    stored,
   };
 };
 
@@ -317,29 +243,33 @@ app.post("/api/pennylane/sync", async (req, res) => {
     return;
   }
 
-  const query: Record<string, unknown> = {
-    limit,
-  };
+  const incrementalValue = getQueryString(
+    req.query.incremental ?? req.body?.incremental,
+  );
+  const incremental =
+    incrementalValue === undefined ? false : parseBoolean(incrementalValue);
+  if (incrementalValue !== undefined && incremental === null) {
+    res.status(400).json({ error: "incremental invalide" });
+    return;
+  }
 
-  if (parsedMonth) {
-    const range = getMonthRange(parsedMonth.year, parsedMonth.month);
-    query["filter[date][gteq]"] = range.start;
-    query["filter[date][lteq]"] = range.end;
+  const sinceValue = getQueryString(req.query.since ?? req.body?.since);
+  const since = sinceValue ? parseDateOnly(sinceValue) : null;
+  if (sinceValue && !since) {
+    res.status(400).json({ error: "since invalide (YYYY-MM-DD)" });
+    return;
   }
 
   try {
-    const kinds: InvoiceKind[] =
-      kind === "all" ? ["customer", "supplier"] : [kind];
-    const results = [];
-
-    for (const entry of kinds) {
-      results.push(await syncPennylaneInvoices(entry, query));
-    }
-
-    res.json({
-      month: parsedMonth?.value ?? null,
-      results,
+    const result = await syncPennylane({
+      type: kind,
+      month: parsedMonth?.value,
+      limit,
+      incremental: incremental ?? false,
+      since: since ?? undefined,
     });
+
+    res.json(result);
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Erreur inconnue";
@@ -411,6 +341,8 @@ app.get("/api/invoices/summary", (req, res) => {
     items: summary,
   });
 });
+
+startPennylaneScheduler();
 
 app.listen(port, () => {
   console.log(`Serveur démarré sur http://localhost:${port}`);

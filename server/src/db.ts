@@ -46,6 +46,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS invoices_kind_pennylane_id
 
 CREATE INDEX IF NOT EXISTS invoices_month_kind
   ON invoices(month, kind);
+
+CREATE TABLE IF NOT EXISTS sync_state (
+  kind TEXT PRIMARY KEY,
+  last_synced_at TEXT NOT NULL
+);
 `;
 
 export const getDb = () => {

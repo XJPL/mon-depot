@@ -181,3 +181,30 @@ export const listInvoicesByMonth = (
     raw: parseJson(row.raw_json),
   }));
 };
+
+export const getLastSync = (kind: InvoiceKind) => {
+  const db = getDb();
+  const row = db
+    .prepare(
+      `
+    SELECT last_synced_at
+    FROM sync_state
+    WHERE kind = ?
+  `,
+    )
+    .get(kind) as { last_synced_at?: string } | undefined;
+
+  return row?.last_synced_at ?? null;
+};
+
+export const setLastSync = (kind: InvoiceKind, lastSyncedAt: string) => {
+  const db = getDb();
+  db.prepare(
+    `
+    INSERT INTO sync_state (kind, last_synced_at)
+    VALUES (?, ?)
+    ON CONFLICT(kind) DO UPDATE SET
+      last_synced_at = excluded.last_synced_at
+  `,
+  ).run(kind, lastSyncedAt);
+};

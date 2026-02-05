@@ -31,6 +31,7 @@ Endpoints exposes :
 - `GET /api/pennylane/customer-invoices`
 - `GET /api/pennylane/supplier-invoices`
 - `POST /api/pennylane/sync?type=customer|supplier|all&month=YYYY-MM&limit=100`
+- `POST /api/pennylane/sync?type=customer|supplier|all&incremental=true&since=YYYY-MM-DD`
 - `GET /api/invoices?month=YYYY-MM&type=customer|supplier|all`
 - `GET /api/invoices/summary?month=YYYY-MM&type=customer|supplier|all`
 
@@ -40,6 +41,33 @@ les factures en base SQLite. Utiliser ensuite `/api/invoices` pour recuperer
 les factures par mois.
 `/api/invoices/summary` renvoie une liste simplifiee (date, numero, tiers,
 ttc, tva, ht).
+
+#### Mode incremental
+Le mode incremental utilise la date de derniere synchronisation stockee en base
+(`sync_state`) et applique un filtre `date >= derniere_sync`. Une premiere
+execution sans historique fait une synchro complete.
+
+#### CLI de synchronisation
+```bash
+cd server
+npm run sync -- --type=all --month=2024-12
+npm run sync -- --type=customer --incremental
+npm run sync -- --type=supplier --incremental --since=2024-01-01
+```
+
+#### Scheduler (cron)
+Le serveur peut lancer une synchro automatique si `PENNYLANE_CRON` est defini.
+```bash
+export PENNYLANE_CRON="0 2 * * *"
+export PENNYLANE_CRON_TZ="Europe/Paris"
+export PENNYLANE_CRON_TYPE="all"
+export PENNYLANE_CRON_LIMIT="100"
+export PENNYLANE_CRON_INCREMENTAL="true"
+export PENNYLANE_CRON_RUN_ON_START="false"
+# Optionnels
+export PENNYLANE_CRON_MONTH="2024-12"
+export PENNYLANE_CRON_SINCE="2024-01-01"
+```
 
 ### Front (React)
 ```bash
