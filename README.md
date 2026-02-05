@@ -17,6 +17,20 @@ npm run dev
 ```
 L'API ecoute par defaut sur `http://localhost:3001` et expose `GET /api/health`.
 
+#### Connecteur Pennylane
+Definir les variables d'environnement avant de lancer le serveur :
+```bash
+export PENNYLANE_ACCESS_TOKEN="votre_token_oauth"
+# Optionnel (par defaut): https://app.pennylane.com/api/external/v2
+export PENNYLANE_BASE_URL="https://app.pennylane.com/api/external/v2"
+```
+
+Endpoints exposes :
+- `GET /api/pennylane/customer-invoices`
+- `GET /api/pennylane/supplier-invoices`
+
+Les parametres de requete sont passes tels quels a l'API Pennylane.
+
 ### Front (React)
 ```bash
 cd client
