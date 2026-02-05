@@ -2,6 +2,12 @@ const DEFAULT_BASE_URL = "https://app.pennylane.com/api/external/v2";
 
 type QueryValue = string | number | boolean | null | undefined;
 
+export type PennylaneListResponse<T> = {
+  items: T[];
+  next_cursor?: string | null;
+  has_more?: boolean;
+};
+
 const getAccessToken = () => {
   const token = process.env.PENNYLANE_ACCESS_TOKEN;
   if (!token) {
@@ -18,29 +24,30 @@ const getBaseUrl = () => {
 const toSearchParams = (query: Record<string, unknown>) => {
   const params = new URLSearchParams();
 
-  for (const [key, value] of Object.entries(query)) {
+  const appendParam = (key: string, value: unknown) => {
     if (value === undefined || value === null) {
-      continue;
+      return;
     }
 
     if (Array.isArray(value)) {
       for (const item of value) {
-        if (item === undefined || item === null) {
-          continue;
-        }
-        if (typeof item === "object") {
-          continue;
-        }
-        params.append(key, String(item as QueryValue));
+        appendParam(key, item);
       }
-      continue;
+      return;
     }
 
     if (typeof value === "object") {
-      continue;
+      for (const [childKey, childValue] of Object.entries(value)) {
+        appendParam(`${key}[${childKey}]`, childValue);
+      }
+      return;
     }
 
     params.append(key, String(value as QueryValue));
+  };
+
+  for (const [key, value] of Object.entries(query)) {
+    appendParam(key, value);
   }
 
   return params;
@@ -68,4 +75,88 @@ export const fetchPennylane = async (
       Accept: "application/json",
     },
   });
+};
+
+const parsePennylaneError = (rawText: string, status: number) => {
+  if (!rawText) {
+    return `Erreur Pennylane (HTTP ${status})`;
+  }
+
+  try {
+    const parsed = JSON.parse(rawText) as {
+      error?: string;
+      message?: string;
+    };
+    if (parsed?.error) {
+      return parsed.error;
+    }
+    if (parsed?.message) {
+      return parsed.message;
+    }
+  } catch {
+    // ignore JSON parsing errors
+  }
+
+  return rawText;
+};
+
+export const fetchPennylaneListPage = async <T>(
+  path: string,
+  query: Record<string, unknown>,
+): Promise<PennylaneListResponse<T>> => {
+  const response = await fetchPennylane(path, query);
+  const rawText = await response.text();
+
+  if (!response.ok) {
+    const message = parsePennylaneError(rawText, response.status);
+    throw new Error(`Erreur Pennylane: ${message}`);
+  }
+
+  if (!rawText) {
+    return { items: [], next_cursor: null, has_more: false };
+  }
+
+  const parsed = JSON.parse(rawText) as PennylaneListResponse<T>;
+  const items = Array.isArray(parsed.items) ? parsed.items : [];
+
+  return {
+    ...parsed,
+    items,
+  };
+};
+
+export const fetchPennylaneAllPages = async <T>(
+  path: string,
+  query: Record<string, unknown>,
+  onPage: (items: T[], page: PennylaneListResponse<T>) => Promise<void> | void,
+) => {
+  let cursor: string | undefined;
+  const seenCursors = new Set<string>();
+  let pageCount = 0;
+  let totalItems = 0;
+
+  while (true) {
+    const pageQuery = {
+      ...query,
+      cursor,
+    };
+
+    const page = await fetchPennylaneListPage<T>(path, pageQuery);
+    pageCount += 1;
+    totalItems += page.items.length;
+
+    await onPage(page.items, page);
+
+    const nextCursor = page.next_cursor ?? null;
+    if (!nextCursor || page.has_more === false) {
+      break;
+    }
+    if (seenCursors.has(nextCursor)) {
+      throw new Error("Boucle de pagination detectee");
+    }
+    seenCursors.add(nextCursor);
+    cursor = nextCursor;
+  }
+
+  return { pageCount, totalItems };
 };

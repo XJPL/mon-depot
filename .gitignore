@@ -15,3 +15,7 @@ pnpm-debug.log*
 .DS_Store
 .vscode/
 .idea/
+*.sqlite
+*.sqlite3
+*.db
+/server/data/
