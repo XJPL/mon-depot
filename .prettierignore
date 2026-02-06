@@ -1,0 +1,9 @@
+node_modules
+dist
+build
+coverage
+server/data
+**/*.sqlite
+**/*.sqlite3
+**/*.db
+**/*.log

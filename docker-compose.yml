@@ -1,0 +1,33 @@
+services:
+  server:
+    build:
+      context: ./server
+    environment:
+      PORT: "3001"
+      PENNYLANE_ACCESS_TOKEN: ${PENNYLANE_ACCESS_TOKEN}
+      PENNYLANE_BASE_URL: ${PENNYLANE_BASE_URL:-https://app.pennylane.com/api/external/v2}
+      PENNYLANE_DB_PATH: /app/data/pennylane.sqlite
+      PENNYLANE_CRON: ${PENNYLANE_CRON:-}
+      PENNYLANE_CRON_TZ: ${PENNYLANE_CRON_TZ:-}
+      PENNYLANE_CRON_TYPE: ${PENNYLANE_CRON_TYPE:-all}
+      PENNYLANE_CRON_LIMIT: ${PENNYLANE_CRON_LIMIT:-100}
+      PENNYLANE_CRON_INCREMENTAL: ${PENNYLANE_CRON_INCREMENTAL:-true}
+      PENNYLANE_CRON_RUN_ON_START: ${PENNYLANE_CRON_RUN_ON_START:-false}
+      PENNYLANE_CRON_MONTH: ${PENNYLANE_CRON_MONTH:-}
+      PENNYLANE_CRON_SINCE: ${PENNYLANE_CRON_SINCE:-}
+    volumes:
+      - pennylane_data:/app/data
+    expose:
+      - "3001"
+
+  web:
+    build:
+      context: .
+      dockerfile: client/Dockerfile
+    depends_on:
+      - server
+    ports:
+      - "80:80"
+
+volumes:
+  pennylane_data:
