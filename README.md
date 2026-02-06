@@ -52,6 +52,11 @@ Endpoints exposes :
 - `GET /api/invoices?month=YYYY-MM&type=customer|supplier|all`
 - `GET /api/invoices/summary?month=YYYY-MM&type=customer|supplier|all`
 
+### Contrat d'API
+- Un `X-Request-Id` est renvoye sur chaque reponse.
+- Les erreurs suivent le format:
+  `{ error, code, details, requestId }`.
+
 Les parametres de requete sont passes tels quels a l'API Pennylane.
 Le endpoint `/api/pennylane/sync` gere la pagination automatiquement et stocke
 les factures en base SQLite. Utiliser ensuite `/api/invoices` pour recuperer
@@ -112,6 +117,8 @@ npm run load
 ## Bonnes pratiques
 Les regles de developpement Node.js + TypeScript sont documentees ici :
 `docs/bonnes-pratiques-node-ts.md`.
+Les regles de contrats d'API sont documentees ici :
+`docs/bonnes-pratiques-contrats-api.md`.
 
 ### Lint & format
 ```bash

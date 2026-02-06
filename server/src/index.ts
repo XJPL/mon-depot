@@ -1,19 +1,23 @@
+import crypto from "node:crypto";
 import express from "express";
 import { fetchPennylane } from "./pennylane.js";
-import { type InvoiceKind, listInvoicesByMonth } from "./invoiceStore.js";
+import { listInvoicesByMonth } from "./invoiceStore.js";
 import { buildInvoiceSummary } from "./invoiceSummary.js";
-import {
-  parseDateOnly,
-  parseLimit,
-  parseMonth,
-  syncPennylane,
-} from "./syncService.js";
+import { invoicesQuerySchema, syncQuerySchema } from "./apiContracts.js";
+import { formatZodError, sendError } from "./http.js";
+import { syncPennylane } from "./syncService.js";
 import { startPennylaneScheduler } from "./scheduler.js";
 
 const app = express();
 const port = Number(process.env.PORT) || 3001;
 
 app.use(express.json());
+app.use((_req, res, next) => {
+  const requestId = crypto.randomUUID();
+  res.locals.requestId = requestId;
+  res.setHeader("X-Request-Id", requestId);
+  next();
+});
 
 app.get("/", (_req, res) => {
   res.json({ message: "API en ligne" });
@@ -67,30 +71,6 @@ const getQueryString = (value: unknown) => {
   return undefined;
 };
 
-const parseInvoiceKind = (value?: string) => {
-  if (!value || value === "all") {
-    return "all";
-  }
-  if (value === "customer" || value === "supplier") {
-    return value;
-  }
-  return null;
-};
-
-const parseBoolean = (value?: string) => {
-  if (!value) {
-    return null;
-  }
-  const normalized = value.trim().toLowerCase();
-  if (["true", "1", "yes", "y", "on"].includes(normalized)) {
-    return true;
-  }
-  if (["false", "0", "no", "n", "off"].includes(normalized)) {
-    return false;
-  }
-  return null;
-};
-
 const handlePennylaneList = async (
   req: express.Request,
   res: express.Response,
@@ -114,7 +94,7 @@ const handlePennylaneList = async (
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Erreur inconnue";
-    res.status(500).json({ error: message });
+    sendError(res, 500, "PENNYLANE_PROXY_ERROR", message);
   }
 };
 
@@ -127,48 +107,32 @@ app.get("/api/pennylane/supplier-invoices", (req, res) => {
 });
 
 app.post("/api/pennylane/sync", async (req, res) => {
-  const typeValue = getQueryString(req.query.type ?? req.body?.type);
-  const kind = parseInvoiceKind(typeValue);
-  if (!kind) {
-    res.status(400).json({ error: "type invalide" });
+  const input = {
+    type: getQueryString(req.query.type ?? req.body?.type),
+    month: getQueryString(req.query.month ?? req.body?.month),
+    limit: getQueryString(req.query.limit ?? req.body?.limit),
+    incremental: getQueryString(req.query.incremental ?? req.body?.incremental),
+    since: getQueryString(req.query.since ?? req.body?.since),
+  };
+
+  const parsed = syncQuerySchema.safeParse(input);
+  if (!parsed.success) {
+    sendError(
+      res,
+      400,
+      "VALIDATION_ERROR",
+      "Parametres invalides",
+      formatZodError(parsed.error),
+    );
     return;
   }
 
-  const monthValue = getQueryString(req.query.month ?? req.body?.month);
-  const parsedMonth = parseMonth(monthValue);
-  if (monthValue && !parsedMonth) {
-    res.status(400).json({ error: "month invalide (YYYY-MM)" });
-    return;
-  }
-
-  const limitValue = getQueryString(req.query.limit ?? req.body?.limit);
-  const limit = parseLimit(limitValue);
-  if (!limit) {
-    res.status(400).json({ error: "limit invalide (1-100)" });
-    return;
-  }
-
-  const incrementalValue = getQueryString(
-    req.query.incremental ?? req.body?.incremental,
-  );
-  const incremental =
-    incrementalValue === undefined ? false : parseBoolean(incrementalValue);
-  if (incrementalValue !== undefined && incremental === null) {
-    res.status(400).json({ error: "incremental invalide" });
-    return;
-  }
-
-  const sinceValue = getQueryString(req.query.since ?? req.body?.since);
-  const since = sinceValue ? parseDateOnly(sinceValue) : null;
-  if (sinceValue && !since) {
-    res.status(400).json({ error: "since invalide (YYYY-MM-DD)" });
-    return;
-  }
+  const { type, month, limit, incremental, since } = parsed.data;
 
   try {
     const result = await syncPennylane({
-      type: kind,
-      month: parsedMonth?.value,
+      type,
+      month,
       limit,
       incremental: incremental ?? false,
       since: since ?? undefined,
@@ -178,70 +142,66 @@ app.post("/api/pennylane/sync", async (req, res) => {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Erreur inconnue";
-    res.status(500).json({ error: message });
+    sendError(res, 500, "SYNC_ERROR", message);
   }
 });
 
 app.get("/api/invoices", (req, res) => {
-  const monthValue = getQueryString(req.query.month);
-  if (!monthValue) {
-    res.status(400).json({ error: "month requis (YYYY-MM)" });
-    return;
-  }
+  const input = {
+    month: getQueryString(req.query.month),
+    type: getQueryString(req.query.type),
+  };
 
-  const parsedMonth = parseMonth(monthValue);
-  if (!parsedMonth) {
-    res.status(400).json({ error: "month invalide (YYYY-MM)" });
-    return;
-  }
-
-  const typeValue = getQueryString(req.query.type);
-  const kind = parseInvoiceKind(typeValue);
-  if (kind === null) {
-    res.status(400).json({ error: "type invalide" });
+  const parsed = invoicesQuerySchema.safeParse(input);
+  if (!parsed.success) {
+    sendError(
+      res,
+      400,
+      "VALIDATION_ERROR",
+      "Parametres invalides",
+      formatZodError(parsed.error),
+    );
     return;
   }
 
   const items = listInvoicesByMonth(
-    parsedMonth.value,
-    kind === "all" ? undefined : kind,
+    parsed.data.month,
+    parsed.data.type === "all" ? undefined : parsed.data.type,
   );
 
   res.json({
-    month: parsedMonth.value,
+    month: parsed.data.month,
     count: items.length,
     items,
   });
 });
 
 app.get("/api/invoices/summary", (req, res) => {
-  const monthValue = getQueryString(req.query.month);
-  if (!monthValue) {
-    res.status(400).json({ error: "month requis (YYYY-MM)" });
-    return;
-  }
+  const input = {
+    month: getQueryString(req.query.month),
+    type: getQueryString(req.query.type),
+  };
 
-  const parsedMonth = parseMonth(monthValue);
-  if (!parsedMonth) {
-    res.status(400).json({ error: "month invalide (YYYY-MM)" });
-    return;
-  }
-
-  const typeValue = getQueryString(req.query.type);
-  const kind = parseInvoiceKind(typeValue);
-  if (kind === null) {
-    res.status(400).json({ error: "type invalide" });
+  const parsed = invoicesQuerySchema.safeParse(input);
+  if (!parsed.success) {
+    sendError(
+      res,
+      400,
+      "VALIDATION_ERROR",
+      "Parametres invalides",
+      formatZodError(parsed.error),
+    );
     return;
   }
 
   const items = listInvoicesByMonth(
-    parsedMonth.value,
-    kind === "all" ? undefined : kind,
+    parsed.data.month,
+    parsed.data.type === "all" ? undefined : parsed.data.type,
   );
   const summary = items.map(buildInvoiceSummary);
 
   res.json({
-    month: parsedMonth.value,
+    month: parsed.data.month,
     count: summary.length,
     items: summary,
   });
