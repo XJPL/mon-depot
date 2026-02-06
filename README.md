@@ -120,6 +120,16 @@ Les regles de developpement Node.js + TypeScript sont documentees ici :
 Les regles de contrats d'API sont documentees ici :
 `docs/bonnes-pratiques-contrats-api.md`.
 
+### Application obligatoire
+Un workflow CI est fourni (`.github/workflows/ci.yml`) et verifie :
+- lint
+- format
+- typecheck
+- tests unitaires + non regression
+- build du client
+
+En production, ces checks doivent etre passes avant toute livraison.
+
 ### Lint & format
 ```bash
 # Server
