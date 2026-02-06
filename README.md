@@ -109,6 +109,23 @@ LOAD_DURATION=15 LOAD_CONNECTIONS=25 \\
 npm run load
 ```
 
+## Bonnes pratiques
+Les regles de developpement Node.js + TypeScript sont documentees ici :
+`docs/bonnes-pratiques-node-ts.md`.
+
+### Lint & format
+```bash
+# Server
+cd server
+npm run lint
+npm run format:check
+
+# Client
+cd ../client
+npm run lint
+npm run format:check
+```
+
 ### Front (React)
 ```bash
 cd client
