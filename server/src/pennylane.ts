@@ -8,8 +8,12 @@ export type PennylaneListResponse<T> = {
   has_more?: boolean;
 };
 
-const getAccessToken = () => {
-  const token = process.env.PENNYLANE_ACCESS_TOKEN;
+type FetchOptions = {
+  token?: string;
+};
+
+const getAccessToken = (override?: string) => {
+  const token = override?.trim() || process.env.PENNYLANE_ACCESS_TOKEN;
   if (!token) {
     throw new Error("PENNYLANE_ACCESS_TOKEN manquant");
   }
@@ -56,6 +60,7 @@ const toSearchParams = (query: Record<string, unknown>) => {
 export const fetchPennylane = async (
   path: string,
   query: Record<string, unknown>,
+  options?: FetchOptions,
 ) => {
   const baseUrl = getBaseUrl();
   const url = new URL(path.replace(/^\/+/, ""), `${baseUrl}/`);
@@ -66,7 +71,7 @@ export const fetchPennylane = async (
     url.search = paramsString;
   }
 
-  const token = getAccessToken();
+  const token = getAccessToken(options?.token);
 
   return fetch(url, {
     method: "GET",
@@ -103,8 +108,9 @@ const parsePennylaneError = (rawText: string, status: number) => {
 export const fetchPennylaneListPage = async <T>(
   path: string,
   query: Record<string, unknown>,
+  options?: FetchOptions,
 ): Promise<PennylaneListResponse<T>> => {
-  const response = await fetchPennylane(path, query);
+  const response = await fetchPennylane(path, query, options);
   const rawText = await response.text();
 
   if (!response.ok) {
@@ -129,6 +135,7 @@ export const fetchPennylaneAllPages = async <T>(
   path: string,
   query: Record<string, unknown>,
   onPage: (items: T[], page: PennylaneListResponse<T>) => Promise<void> | void,
+  options?: FetchOptions,
 ) => {
   let cursor: string | undefined;
   const seenCursors = new Set<string>();
@@ -141,7 +148,7 @@ export const fetchPennylaneAllPages = async <T>(
       cursor,
     };
 
-    const page = await fetchPennylaneListPage<T>(path, pageQuery);
+    const page = await fetchPennylaneListPage<T>(path, pageQuery, options);
     pageCount += 1;
     totalItems += page.items.length;
 

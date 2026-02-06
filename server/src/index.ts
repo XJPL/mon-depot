@@ -97,9 +97,18 @@ const handlePennylaneList = async (
   path: string,
 ) => {
   try {
+    const headerToken = req.get("x-pennylane-token");
+    const authHeader = req.get("authorization");
+    const bearerToken =
+      authHeader && authHeader.toLowerCase().startsWith("bearer ")
+        ? authHeader.slice(7)
+        : undefined;
+    const tokenOverride = headerToken ?? bearerToken ?? undefined;
+
     const response = await fetchPennylane(
       path,
       req.query as Record<string, unknown>,
+      tokenOverride ? { token: tokenOverride } : undefined,
     );
     await sendPennylaneResponse(res, response);
   } catch (error) {

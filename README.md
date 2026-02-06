@@ -118,6 +118,8 @@ npm run dev
 L'app Vite tourne par defaut sur `http://localhost:5173`.
 
 Le front utilise un proxy Vite vers `http://localhost:3001` pour les requetes `/api`.
+L'interface permet de saisir une cle API, choisir le type de factures et
+optionnellement filtrer par code dossier (external_reference).
 
 ## Deploiement Docker (API + Client)
 
